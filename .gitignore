@@ -9,7 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
-# Notebook outputs (checkpoints written by pytorch_intro.py, marimo session cache)
+# Notebook outputs (old checkpoints, marimo session cache)
 artifacts/
 __marimo__/
 .agents/*

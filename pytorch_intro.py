@@ -56,7 +56,7 @@ with app.setup(hide_code=True):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # 🔥 An introduction to PyTorch: exercises
+    # 🔥 An introduction to PyTorch
 
     *Getting ready for **Build a Large Language Model (From Scratch)** by Sebastian Raschka*
 
@@ -118,10 +118,10 @@ def _():
     def exercise_1():
         x = torch.arange(24).reshape(2, 3, 4)
 
-        a = x.permute(2, 0, 1)  # TODO: shape (4, 2, 3)
-        b = x.view(6, -1)  # TODO: shape (6, 4)
-        c = x.unsqueeze(1)  # TODO: shape (2, 1, 3, 4)
-        d = x.to(torch.float32).mean(dim=-1, keepdim=True)  # TODO: shape (2, 3, 1)
+        a = None  # TODO: shape (4, 2, 3)
+        b = None  # TODO: shape (6, 4)
+        c = None  # TODO: shape (2, 1, 3, 4)
+        d = None  # TODO: shape (2, 3, 1)
 
         return check_1(a, b, c, d)
 
@@ -160,8 +160,7 @@ def _():
 def _():
     def my_softmax(x: torch.Tensor):
         """Softmax over the last dimension of `x`."""
-        e = torch.exp(x)
-        return e / torch.sum(e, dim=-1, keepdims=True)
+        return
 
     check_2(my_softmax)
     return
@@ -210,11 +209,10 @@ def _():
 @app.cell
 def _():
     def exercise_3():
-        x = torch.tensor(2.0, requires_grad=True)  # TODO: ask PyTorch to track gradients
-        y = x**3 + 2 * x  # TODO: y = x³ + 2x
+        x = torch.tensor(2.0)  # TODO: ask PyTorch to track gradients
+        y = None  # TODO: y = x³ + 2x
         # TODO: backpropagate from y
-        y.backward()
-        grad = x.grad  # TODO: read dy/dx
+        grad = None  # TODO: read dy/dx
 
         return check_3(x, grad)
 
@@ -266,22 +264,15 @@ def _():
 
         w = torch.zeros(1, requires_grad=True)
         b = torch.zeros(1, requires_grad=True)
-        optimizer = torch.optim.SGD(
-            [w, b], lr=0.1
-        )  # TODO: SGD over [w, b], with a learning rate of 0.1
+        optimizer = None # TODO: SGD over [w, b], with a learning rate of 0.1
         losses = []
         for step in range(200):
             res = w * x + b
-            loss = torch.mean(
-                (res - y) ** 2
-            )  # TODO: the mean squared error of w * x + b
+            loss = None  # TODO: the mean squared error of w * x + b
             # TODO: reset the gradients
-            optimizer.zero_grad()
             # TODO: backpropagate
-            loss.backward()
             # TODO: update w and b
-            optimizer.step()
-            losses.append(loss.item())
+            # TODO: add the loss to the losses
         return check_4(x, y, w, b, optimizer, losses)
 
     exercise_4()
@@ -339,11 +330,6 @@ def _():
         def __init__(self, num_inputs: int, num_outputs: int):
             super().__init__()
             self.layers = nn.Sequential(
-                torch.nn.Linear(num_inputs, 30),
-                torch.nn.ReLU(),
-                torch.nn.Linear(30, 20),
-                torch.nn.ReLU(),
-                torch.nn.Linear(20, num_outputs),
                 # TODO: 1st hidden layer (30 units) and its ReLU
                 # TODO: 2nd hidden layer (20 units) and its ReLU
                 # TODO: output layer
@@ -354,9 +340,7 @@ def _():
 
     def exercise_5():
         model = NeuralNetwork(50, 3)
-        n_params = sum(
-            p.numel() for p in model.parameters()
-        )  # TODO: count the trainable parameters
+        n_params = None # TODO: count the trainable parameters
         return check_5(model, n_params)
 
     exercise_5()
@@ -479,18 +463,14 @@ def _(x_train, y_train):
             self.labels = y
 
         def __getitem__(self, index: int):
-            return self.features[index], self.labels[
-                index
-            ]  # TODO: the (features, label) pair of sample `index`
+            return None # TODO: the (features, label) pair of sample `index`
 
         def __len__(self):
-            return len(self.features)  # TODO: the number of samples
+            return 0  # TODO: the number of samples
 
     def exercise_7():
         train_ds = ToyDataset(x_train, y_train)
-        train_loader = torch.utils.data.DataLoader(
-            train_ds, batch_size=32, shuffle=True
-        )  # TODO: shuffled batches of 32 samples
+        train_loader = None # TODO: shuffled batches of 32 samples
 
         return check_7(train_ds, train_loader, x_train, y_train)
 
@@ -556,13 +536,7 @@ def _(x_train, x_val, y_train, y_val):
         for epoch in range(100):
             model.train()
             for features, labels in train_loader:
-                prediction = model(features)
-                loss = F.cross_entropy(prediction, labels)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                losses.append(loss.item())
-                # pass  # TODO: the five steps, then append loss.item() to losses
+                pass  # TODO: the five steps, then append loss.item() to losses
 
         return check_8(model, losses, x_val, y_val)
 
@@ -622,9 +596,6 @@ def _():
         def __init__(self, token_ids: torch.Tensor, max_length: int, stride: int):
             self.features = []
             self.targets = []
-            for i in range(0, len(token_ids) - max_length, stride):
-                self.features.append(token_ids[i : i + max_length])
-                self.targets.append(token_ids[i + 1 : i + max_length + 1])
             # TODO: a window of `max_length` tokens every `stride` tokens, and its target shifted by one
 
         def __len__(self):
@@ -635,9 +606,7 @@ def _():
 
     def exercise_9():
         text = "I HAD always thought Jack Gisburn rather a cheap genius"
-        token_ids = torch.tensor(
-            [ord(ch) for ch in text]
-        )  # a naive tokenizer: one id per character
+        token_ids = torch.tensor([ord(ch) for ch in text])  # a naive tokenizer: one id per character
         dataset = NextTokenDataset(token_ids, max_length=8, stride=4)
 
         return check_9(dataset, text, max_length=8, stride=4)
@@ -709,7 +678,7 @@ def _(lm_train_loader, tokenizer):
         logits = model(inputs)  # shape (32, 64, 65)
         logits = logits.view(-1, 65)
         targets = targets.flatten()
-        loss = F.cross_entropy(logits, targets)  # TODO
+        loss = None  # TODO
 
         return check_10(loss, logits, targets, tokenizer.vocab_size)
 
@@ -723,7 +692,7 @@ def _(lm_train_loader, lm_val_loader, tokenizer):
 
     lm_model = TinyGPT(tokenizer.vocab_size)
 
-    def _():
+    def train():
         start = time.perf_counter()
         losses = train_lm(
             lm_model, lm_train_loader, lm_val_loader, num_steps=1000, lr=0.01
@@ -734,7 +703,7 @@ def _(lm_train_loader, lm_val_loader, tokenizer):
             f"validation loss **{losses['validation']:.2f}**."
         )
 
-    _()
+    train()
     return (lm_model,)
 
 
@@ -760,17 +729,17 @@ def _():
         ```python
         def generate(model, prompt, max_new_tokens, context_size, temperature=0.0):
             idx = prompt
-            for _ in range(max_new_tokens):
-                idx_cond = idx[:, -context_size:]
-                with torch.no_grad():
+            with torch.no_grad():
+                for _ in range(max_new_tokens):
+                    idx_cond = idx[:, -context_size:]
                     logits = model(idx_cond)
-                logits = logits[:, -1, :]
-                if temperature > 0.0:
-                    probas = torch.softmax(logits / temperature, dim=-1)
-                    idx_next = torch.multinomial(probas, num_samples=1)  # (batch, 1)
-                else:
-                    idx_next = torch.argmax(logits, dim=-1, keepdim=True)  # (batch, 1)
-                idx = torch.cat((idx, idx_next), dim=1)
+                    logits = logits[:, -1, :]
+                    if temperature > 0.0:
+                        probas = torch.softmax(logits / temperature, dim=-1)
+                        idx_next = torch.multinomial(probas, num_samples=1)  # (batch, 1)
+                    else:
+                        idx_next = torch.argmax(logits, dim=-1, keepdim=True)  # (batch, 1)
+                    idx = torch.cat((idx, idx_next), dim=1)
             return idx
         ```
 
@@ -794,16 +763,7 @@ def _(lm_model, tokenizer):
         result = prompt
         with torch.no_grad():
             for _ in range(max_new_tokens):
-                inputs = result[:, -context_size:]
-                predicted = model(inputs)
-                next_token_logits = predicted[:, -1, :]
-                if temperature == 0:
-                    next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
-                else:
-                    probs = torch.softmax(next_token_logits / temperature, dim=-1)
-                    next_token = torch.multinomial(probs, num_samples=1)
-                result = torch.cat([result, next_token], dim=1)
-                # TODO: the five steps of the statement
+                pass # TODO: the five steps of the statement
         return result
 
     check_11(generate, lm_model, tokenizer, lm_model.context_length)
