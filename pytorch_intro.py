@@ -69,8 +69,9 @@ def _():
 
     /// tip | About marimo
     This is a **reactive** [marimo](https://marimo.io) notebook: when you edit a cell, every cell that depends on it
-    re-runs. Names starting with an underscore (`_x`, `_model`) are **local to their cell**, which lets every
-    exercise reuse the same names. Otherwise, variables cannot be reused across cells.
+    re-runs. A variable defined at the top level of a cell is **shared with the whole notebook**, so no other cell
+    can define it again. That is why most exercise cells wrap their code in a function (`exercise_1`, `exercise_3`, …):
+    its variables stay local, and every exercise can reuse the same names.
     ///
     """)
     return
@@ -100,10 +101,10 @@ def _():
         """,
         r"""
         ```python
-        _a = _x.permute(2, 0, 1)
-        _b = _x.reshape(6, 4)  # or _x.view(6, 4), or _x.flatten(0, 1)
-        _c = _x.unsqueeze(1)  # or _x[:, None]
-        _d = _x.to(torch.float32).mean(dim=-1, keepdim=True)
+        a = x.permute(2, 0, 1)
+        b = x.reshape(6, 4)  # or x.view(6, 4), or x.flatten(0, 1)
+        c = x.unsqueeze(1)  # or x[:, None]
+        d = x.to(torch.float32).mean(dim=-1, keepdim=True)
         ```
 
         `mean` is only defined for floating-point tensors: on int64, it raises a `RuntimeError`.
@@ -114,14 +115,17 @@ def _():
 
 @app.cell
 def _():
-    _x = torch.arange(24).reshape(2, 3, 4)
+    def exercise_1():
+        x = torch.arange(24).reshape(2, 3, 4)
 
-    _a = _x.permute(2, 0, 1)  # TODO: shape (4, 2, 3)
-    _b = _x.view(6, -1)  # TODO: shape (6, 4)
-    _c = _x.unsqueeze(1)  # TODO: shape (2, 1, 3, 4)
-    _d = _x.to(torch.float32).mean(dim=-1, keepdim=True)  # TODO: shape (2, 3, 1)
+        a = x.permute(2, 0, 1)  # TODO: shape (4, 2, 3)
+        b = x.view(6, -1)  # TODO: shape (6, 4)
+        c = x.unsqueeze(1)  # TODO: shape (2, 1, 3, 4)
+        d = x.to(torch.float32).mean(dim=-1, keepdim=True)  # TODO: shape (2, 3, 1)
 
-    check_1(_a, _b, _c, _d)
+        return check_1(a, b, c, d)
+
+    exercise_1()
     return
 
 
@@ -182,21 +186,21 @@ def _():
         """,
         r"""
         ```python
-        _x = torch.tensor(2.0, requires_grad=True)
-        _y = _x**3 + 2 * _x
-        _y.backward()
-        _grad = _x.grad  # tensor(14.)
+        x = torch.tensor(2.0, requires_grad=True)
+        y = x**3 + 2 * x
+        y.backward()
+        grad = x.grad  # tensor(14.)
         ```
 
-        Gradients **accumulate**: run the forward pass again, then backpropagate, and `_x.grad` becomes 28.
+        Gradients **accumulate**: run the forward pass again, then backpropagate, and `x.grad` becomes 28.
 
         ```python
-        _y = _x**3 + 2 * _x  # a new graph
-        _y.backward()
-        _x.grad  # tensor(28.)
+        y = x**3 + 2 * x  # a new graph
+        y.backward()
+        x.grad  # tensor(28.)
         ```
 
-        Calling `_y.backward()` twice on the **same** `_y` raises a `RuntimeError`: the first call frees the values
+        Calling `y.backward()` twice on the **same** `y` raises a `RuntimeError`: the first call frees the values
         that the forward pass saved for the backward pass.
         """,
     )
@@ -205,13 +209,16 @@ def _():
 
 @app.cell
 def _():
-    _x = torch.tensor(2.0, requires_grad=True)  # TODO: ask PyTorch to track gradients
-    _y = _x**3 + 2 * _x  # TODO: y = x³ + 2x
-    # TODO: backpropagate from y
-    _y.backward()
-    _grad = _x.grad  # TODO: read dy/dx
+    def exercise_3():
+        x = torch.tensor(2.0, requires_grad=True)  # TODO: ask PyTorch to track gradients
+        y = x**3 + 2 * x  # TODO: y = x³ + 2x
+        # TODO: backpropagate from y
+        y.backward()
+        grad = x.grad  # TODO: read dy/dx
 
-    check_3(_x, _grad)
+        return check_3(x, grad)
+
+    exercise_3()
     return
 
 
@@ -231,13 +238,13 @@ def _():
         """,
         r"""
         ```python
-        _optimizer = torch.optim.SGD([_w, _b], lr=0.1)
-        for _step in range(200):
-            _loss = ((_w * _x + _b - _y) ** 2).mean()
-            _optimizer.zero_grad()
-            _loss.backward()
-            _optimizer.step()
-            _losses.append(_loss.item())
+        optimizer = torch.optim.SGD([w, b], lr=0.1)
+        for step in range(200):
+            loss = ((w * x + b - y) ** 2).mean()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            losses.append(loss.item())
         ```
 
         - The optimizer receives the tensors to train: here `[w, b]`, later `model.parameters()`.
@@ -252,7 +259,7 @@ def _():
 
 @app.cell
 def _():
-    def _():
+    def exercise_4():
         torch.manual_seed(0)
         x = torch.linspace(-1, 1, 50)
         y = 3 * x + 1 + 0.1 * torch.randn(50)
@@ -275,9 +282,9 @@ def _():
             # TODO: update w and b
             optimizer.step()
             losses.append(loss.item())
-        return x, y, w, b, optimizer, losses
+        return check_4(x, y, w, b, optimizer, losses)
 
-    check_4(*_())
+    exercise_4()
     return
 
 
@@ -315,7 +322,8 @@ def _():
             def forward(self, x):
                 return self.layers(x)
 
-        _n_params = sum(p.numel() for p in _model.parameters() if p.requires_grad)  # 2,213
+        model = NeuralNetwork(50, 3)
+        n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)  # 2,213
         ```
 
         $(50 \times 30 + 30) + (30 \times 20 + 20) + (20 \times 3 + 3) = 1530 + 620 + 63 = 2213$:
@@ -327,8 +335,6 @@ def _():
 
 @app.cell
 def _():
-    torch.manual_seed(123)
-
     class NeuralNetwork(nn.Module):
         def __init__(self, num_inputs: int, num_outputs: int):
             super().__init__()
@@ -346,14 +352,14 @@ def _():
         def forward(self, x: torch.Tensor):
             return self.layers(x)
 
-    def _():
+    def exercise_5():
         model = NeuralNetwork(50, 3)
         n_params = sum(
             p.numel() for p in model.parameters()
         )  # TODO: count the trainable parameters
-        return model, n_params
+        return check_5(model, n_params)
 
-    check_5(*_())
+    exercise_5()
     return
 
 
@@ -421,16 +427,14 @@ def _():
 @app.cell
 def _():
     x_train, y_train, x_val, y_val = make_spirals()
-    print(
-        f"X_train: {tuple(x_train.shape)} {x_train.dtype} | y_train: {tuple(y_train.shape)} {y_train.dtype}"
-    )
+    print(f"X_train: {tuple(x_train.shape)} {x_train.dtype} | y_train: {tuple(y_train.shape)} {y_train.dtype}")
     print(f"X_val  : {tuple(x_val.shape)} | y_val: {tuple(y_val.shape)}")
 
-    _fig, _ax = plt.subplots(figsize=(3.6, 3.6), constrained_layout=True)
-    _ax.scatter(x_train[:, 0], x_train[:, 1], c=y_train, cmap=CLASS_CMAP, s=8)
-    _ax.set_aspect("equal")
-    _ax.set_title("Training set")
-    _fig
+    fig, ax = plt.subplots(figsize=(3.6, 3.6), constrained_layout=True)
+    ax.scatter(x_train[:, 0], x_train[:, 1], c=y_train, cmap=CLASS_CMAP, s=8)
+    ax.set_aspect("equal")
+    ax.set_title("Training set")
+    fig
     return x_train, x_val, y_train, y_val
 
 
@@ -457,7 +461,8 @@ def _():
             def __len__(self):
                 return self.labels.shape[0]
 
-        _train_loader = DataLoader(_train_ds, batch_size=32, shuffle=True)
+        train_ds = ToyDataset(x_train, y_train)
+        train_loader = DataLoader(train_ds, batch_size=32, shuffle=True)
         ```
 
         For tensors already in memory, `TensorDataset(X, y)` does the same job.
@@ -481,12 +486,15 @@ def _(x_train, y_train):
         def __len__(self):
             return len(self.features)  # TODO: the number of samples
 
-    _train_ds = ToyDataset(x_train, y_train)
-    _train_loader = torch.utils.data.DataLoader(
-        _train_ds, batch_size=32, shuffle=True
-    )  # TODO: shuffled batches of 32 samples
+    def exercise_7():
+        train_ds = ToyDataset(x_train, y_train)
+        train_loader = torch.utils.data.DataLoader(
+            train_ds, batch_size=32, shuffle=True
+        )  # TODO: shuffled batches of 32 samples
 
-    check_7(_train_ds, _train_loader, x_train, y_train)
+        return check_7(train_ds, train_loader, x_train, y_train)
+
+    exercise_7()
     return
 
 
@@ -513,13 +521,13 @@ def _():
         """,
         r"""
         ```python
-        for _features, _labels in _train_loader:
-            _logits = _model(_features)  # 1. forward
-            _loss = F.cross_entropy(_logits, _labels)  # 2. loss
-            _optimizer.zero_grad()  # 3. reset the gradients
-            _loss.backward()  # 4. backward
-            _optimizer.step()  # 5. update
-            _losses.append(_loss.item())
+        for features, labels in train_loader:
+            logits = model(features)  # 1. forward
+            loss = F.cross_entropy(logits, labels)  # 2. loss
+            optimizer.zero_grad()  # 3. reset the gradients
+            loss.backward()  # 4. backward
+            optimizer.step()  # 5. update
+            losses.append(loss.item())
         ```
 
         `F.cross_entropy` takes the **raw logits**: no softmax. A linear model gets stuck below 50 %: its decision
@@ -531,9 +539,7 @@ def _():
 
 @app.cell
 def _(x_train, x_val, y_train, y_val):
-    torch.manual_seed(123)
-
-    def _():
+    def exercise_8():
         model = nn.Sequential(
             nn.Linear(2, 32),
             nn.ReLU(),
@@ -556,11 +562,11 @@ def _(x_train, x_val, y_train, y_val):
                 loss.backward()
                 optimizer.step()
                 losses.append(loss.item())
-                # pass  # TODO: the five steps, then append loss.item() to _losses
+                # pass  # TODO: the five steps, then append loss.item() to losses
 
         return check_8(model, losses, x_val, y_val)
 
-    _()
+    exercise_8()
     return
 
 
@@ -627,13 +633,16 @@ def _():
         def __getitem__(self, idx: int):
             return self.features[idx], self.targets[idx]
 
-    _text = "I HAD always thought Jack Gisburn rather a cheap genius"
-    _token_ids = torch.tensor(
-        [ord(_ch) for _ch in _text]
-    )  # a naive tokenizer: one id per character
-    _dataset = NextTokenDataset(_token_ids, max_length=8, stride=4)
+    def exercise_9():
+        text = "I HAD always thought Jack Gisburn rather a cheap genius"
+        token_ids = torch.tensor(
+            [ord(ch) for ch in text]
+        )  # a naive tokenizer: one id per character
+        dataset = NextTokenDataset(token_ids, max_length=8, stride=4)
 
-    check_9(_dataset, _text, max_length=8, stride=4)
+        return check_9(dataset, text, max_length=8, stride=4)
+
+    exercise_9()
     return
 
 
@@ -642,18 +651,24 @@ def _():
     corpus = (DATA_DIR / "tinyshakespeare.txt").read_text(encoding="utf-8")
     tokenizer = CharTokenizer(corpus)
 
-    # Windows of context_length + 1 tokens: the same as NextTokenDataset with stride = max_length
-    _windows = tokenizer.encode(corpus).unfold(0, 65, 64)
-    _split = int(0.9 * len(_windows))  # 90 % training, 10 % validation, as in chapter 5
-    lm_train_loader = DataLoader(
-        TensorDataset(_windows[:_split, :-1], _windows[:_split, 1:]),
-        batch_size=32,
-        shuffle=True,
-        drop_last=True,
-    )
-    lm_val_loader = DataLoader(
-        TensorDataset(_windows[_split:, :-1], _windows[_split:, 1:]), batch_size=32
-    )
+    def _():
+        # Windows of context_length + 1 tokens: the same as NextTokenDataset with stride = max_length
+        windows = tokenizer.encode(corpus).unfold(0, 65, 64)
+        split = int(
+            0.9 * len(windows)
+        )  # 90 % training, 10 % validation, as in chapter 5
+        train_loader = DataLoader(
+            TensorDataset(windows[:split, :-1], windows[:split, 1:]),
+            batch_size=32,
+            shuffle=True,
+            drop_last=True,
+        )
+        val_loader = DataLoader(
+            TensorDataset(windows[split:, :-1], windows[split:, 1:]), batch_size=32
+        )
+        return train_loader, val_loader
+
+    lm_train_loader, lm_val_loader = _()
 
     print(f"{len(corpus):,} characters, vocabulary of {tokenizer.vocab_size} tokens")
     print(
@@ -676,7 +691,7 @@ def _():
         """,
         r"""
         ```python
-        _loss = F.cross_entropy(_logits.flatten(0, 1), _targets.flatten())
+        loss = F.cross_entropy(logits.flatten(0, 1), targets.flatten())
         ```
 
         After flattening, every position of every sequence is a classification example: `(32 × 64, 65)` logits
@@ -707,15 +722,19 @@ def _(lm_train_loader, lm_val_loader, tokenizer):
     torch.manual_seed(123)
 
     lm_model = TinyGPT(tokenizer.vocab_size)
-    _start = time.perf_counter()
-    _losses = train_lm(
-        lm_model, lm_train_loader, lm_val_loader, num_steps=1000, lr=0.01
-    )
-    mo.md(
-        f"Trained `TinyGPT` ({sum(p.numel() for p in lm_model.parameters()):,} parameters) "
-        f"in {time.perf_counter() - _start:.1f} s on `{device}`: training loss **{_losses['train']:.2f}**, "
-        f"validation loss **{_losses['validation']:.2f}**."
-    )
+
+    def _():
+        start = time.perf_counter()
+        losses = train_lm(
+            lm_model, lm_train_loader, lm_val_loader, num_steps=1000, lr=0.01
+        )
+        return mo.md(
+            f"Trained `TinyGPT` ({sum(p.numel() for p in lm_model.parameters()):,} parameters) "
+            f"in {time.perf_counter() - start:.1f} s on `{device}`: training loss **{losses['train']:.2f}**, "
+            f"validation loss **{losses['validation']:.2f}**."
+        )
+
+    _()
     return (lm_model,)
 
 
@@ -794,7 +813,9 @@ def _(lm_model, tokenizer):
 @app.cell
 def _(generate, lm_model, tokenizer):
     prompt = "ROMEO:"
-    prompt = tokenizer.encode(prompt).unsqueeze(0).to(device)  # add the batch dimension with unsqueeze: (1, tokens)
+    prompt = (
+        tokenizer.encode(prompt).unsqueeze(0).to(device)
+    )  # add the batch dimension with unsqueeze: (1, tokens)
     out = generate(
         lm_model,
         prompt,
