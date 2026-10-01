@@ -1,0 +1,20 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Notebook outputs (checkpoints written by pytorch_intro.py, marimo session cache)
+artifacts/
+__marimo__/
+.agents/*
+!.agents/skills
+LLMs-from-scratch-main/
+.playwright-mcp
+slides.pdf
+uv.lock
