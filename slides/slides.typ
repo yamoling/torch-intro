@@ -240,7 +240,7 @@
     node((1, 1), [`@`, `transpose` \ `triu`, `masked_fill` \ `softmax`], stroke: none),
     node((2, 1), [`nn.Module` \ `nn.Linear` \ `LayerNorm`], stroke: none),
     node((3, 1), [autograd \ `cross_entropy` \ `AdamW`], stroke: none),
-    node((4, 1), [`state_dict` \ `.to(device)` \ `no_grad`], stroke: none),
+    node((4, 1), [`requires_grad_` \ `.to(device)` \ `no_grad`], stroke: none),
   ))
   #v(0.5em)
   #callout[Appendix A of the book is the PyTorch primer; today follows it, then *goes a step further* by training a tiny GPT.]
@@ -533,7 +533,22 @@
   y.backward()
   grad = x.grad          # tensor(14.)
   ```
-  #callout(title: [Try it])[Recompute `y` and call `y.backward()` again: `x.grad` becomes 28. Gradients *accumulate*.]
+  #grid(
+    columns: (1fr, 1fr),
+    gutter: 0.8cm,
+    callout(title: [Try it: gradients *accumulate*])[
+      Run the forward pass again, then backpropagate: `x.grad` becomes 28.
+    ],
+    ```python
+    y = x**3 + 2 * x   # a new graph
+    y.backward()
+    x.grad             # tensor(28.)
+    ```,
+  )
+  #text(
+    size: 16pt,
+    fill: muted,
+  )[Calling `y.backward()` twice on the *same* `y` fails: the first call frees the values saved by the forward pass.]
 ]
 
 #slide[Three autograd gotchas][
@@ -543,7 +558,7 @@
     gutter: 0.9cm,
     [
       + Gradients *accumulate*: every `.backward()` adds to `.grad` → reset them at each step.
-      + `with torch.no_grad():` stops graph recording (evaluation, generation, parameter updates).
+      + `with torch.no_grad():` stops graph recording (evaluation, text generation).
       + `.detach()` cuts a tensor from the graph (needed before `.numpy()`).
     ],
     [
@@ -552,10 +567,11 @@
       (w ** 2).backward()  # dL/dw = 2w = 6
       (w ** 2).backward()
       w.grad               # 12 = 6 + 6!
+      w.grad.zero_()       # reset
 
-      with torch.no_grad():  # not recorded
-          w -= 0.1 * w.grad
-      w.grad.zero_()         # reset
+      with torch.no_grad():
+          z = w * 2        # not recorded
+      z.requires_grad      # False
 
       w.detach().numpy()
       ```
@@ -563,49 +579,60 @@
   )
 ]
 
-#exercise(4, [Gradient descent by hand], minutes: 6)[
+#slide[Optimizers: the update rule, packaged][
+  #show raw.where(block: true): set text(size: 13pt)
+  #grid(
+    columns: (1fr, 1.1fr),
+    gutter: 0.9cm,
+    [
+      An optimizer receives the tensors to train, and updates them from their `.grad`:
+      $ theta <- theta - eta thin nabla_theta cal(L) $
+      - `optimizer.zero_grad()`: reset the gradients (they *accumulate*);
+      - `optimizer.step()`: apply the update rule.
+      #v(0.3em)
+      #text(fill: muted)[`SGD` is the rule above; `Adam` and `AdamW` (used in the book) are smarter variants.]
+    ],
+    [
+      ```python
+      w = torch.zeros(1, requires_grad=True)
+      optimizer = torch.optim.SGD([w], lr=0.1)
+
+      loss = ...            # forward pass
+      optimizer.zero_grad()
+      loss.backward()       # fills w.grad
+      optimizer.step()      # w -= 0.1 * w.grad
+      ```
+    ],
+  )
+]
+
+#exercise(4, [Fit a line with an optimizer], minutes: 5)[
   The data follows $y = 3x + 1$, plus noise. Fit $hat(y) = w x + b$ by minimising the mean squared error, with
-  plain tensors: no `torch.nn`, no optimizer.
+  `torch.optim.SGD` (learning rate 0.1).
 
   ```python
   w = torch.zeros(1, requires_grad=True)
   b = torch.zeros(1, requires_grad=True)
+  optimizer = ...  # TODO: SGD over [w, b]
   for step in range(200):
-      loss = ...  # TODO: the mean squared error of w * x + b
-      # TODO: backpropagate
-      # TODO: update w and b (lr * grad) without recording the graph
+      loss = ...   # TODO: the mean squared error of w * x + b
       # TODO: reset the gradients
+      # TODO: backpropagate
+      # TODO: update w and b
   ```
 ]
 
-#solution(4, [Gradient descent by hand])[
-  #grid(
-    columns: (1.2fr, 1fr),
-    gutter: 0.8cm,
-    [
-      ```python
-      for step in range(200):
-          loss = ((w * x + b - y) ** 2).mean()
-          loss.backward()
-          with torch.no_grad():
-              w -= lr * w.grad
-              b -= lr * b.grad
-          w.grad.zero_()
-          b.grad.zero_()
-      ```
-    ],
-    [
-      This is exactly what an *optimizer* does:
-      ```python
-      opt = torch.optim.SGD([w, b], lr=lr)
-      ...
-      opt.zero_grad()
+#solution(4, [Fit a line with an optimizer])[
+  ```python
+  optimizer = torch.optim.SGD([w, b], lr=0.1)
+  for step in range(200):
+      loss = ((w * x + b - y) ** 2).mean()
+      optimizer.zero_grad()
       loss.backward()
-      opt.step()
-      ```
-      #text(size: 16pt, fill: muted)[`Adam` and `AdamW` (used in the book) just have smarter update rules.]
-    ],
-  )
+      optimizer.step()
+  ```
+  - Result: $w approx 3$, $b approx 1$.
+  - With a model, the same code trains `model.parameters()` instead of `[w, b]`: this is the training loop of § 5.
 ]
 
 // ------------------------------------------------------------------ § 3
@@ -701,12 +728,12 @@
 
 #slide[Parameters, buffers, and modes][
   #table(
-    columns: (1.3fr, auto, auto, auto),
-    align: (left, center, center, center),
-    table.header[Attribute][Trained][Saved][Moved by `.to()`],
-    [`nn.Parameter(torch.ones(d))`], [✓], [✓], [✓],
-    [`self.register_buffer("mask", …)`], [✗], [✓], [✓],
-    [`self.plain = torch.zeros(d)`], [✗], [✗], [✗],
+    columns: (1.3fr, auto, auto),
+    align: (left, center, center),
+    table.header[Attribute][Trained][Moved by `.to()`],
+    [`nn.Parameter(torch.ones(d))`], [✓], [✓],
+    [`self.register_buffer("mask", …)`], [✗], [✓],
+    [`self.plain = torch.zeros(d)`], [✗], [✗],
   )
   #v(0.5em)
   #grid(
@@ -800,8 +827,8 @@
           num_workers=0,   # parallel
       )
 
-      for X, y in train_loader:
-          ...   # X: (32, 2), y: (32,)
+      for x, y in train_loader:
+          ...   # x: (32, 2), y: (32,)
       ```
     ],
   )
@@ -809,9 +836,9 @@
 
 #exercise(7, [A `Dataset` and its `DataLoader` (listing A.6)], minutes: 5)[
   The data: three interleaved spirals, a 2-D problem that a linear model *cannot* solve.
-  - `X_train`: `(360, 2)` float32 features; `y_train`: `(360,)` int64 labels.
+  - `x_train`: `(360, 2)` float32 features; `y_train`: `(360,)` int64 labels.
 
-  Complete `ToyDataset(X, y)`:
+  Complete `ToyDataset(x, y)`:
   - `__len__`: the number of samples;
   - `__getitem__(index)`: the pair `(features, label)` of sample `index`.
 
@@ -825,8 +852,8 @@
     [
       ```python
       class ToyDataset(Dataset):
-          def __init__(self, X, y):
-              self.features = X
+          def __init__(self, x, y):
+              self.features = x
               self.labels = y
 
           def __getitem__(self, index):
@@ -839,67 +866,19 @@
     ],
     [
       ```python
-      ds = ToyDataset(X_train, y_train)
+      ds = ToyDataset(x_train, y_train)
       train_loader = DataLoader(
           ds, batch_size=32, shuffle=True)
-      X, y = next(iter(train_loader))
-      # X: (32, 2), y: (32,)
+      x, y = next(iter(train_loader))
+      # x: (32, 2), y: (32,)
       ```
-      #text(size: 16pt)[For tensors already in memory, `TensorDataset(X, y)` does the same job.]
+      #text(size: 16pt)[For tensors already in memory, `TensorDataset(x, y)` does the same job.]
     ],
   )
 ]
 
-#slide[Next-token prediction data (ch. 2)][
-  #let cell(ch, color) = box(
-    width: 1.05cm,
-    height: 1.05cm,
-    fill: color.lighten(85%),
-    stroke: 0.8pt + color,
-    radius: 3pt,
-    align(center + horizon, text(font: "DejaVu Sans Mono", size: 17pt, ch)),
-  )
-  #let chars = "I HAD always".clusters()
-  #let row(label, offset, color) = grid(
-    columns: (3cm,) + (1.15cm,) * 13,
-    align: horizon,
-    text(size: 16pt, weight: "bold", fill: color, label),
-    ..range(13).map(i => if i >= offset and i < offset + 8 { cell(chars.at(i).replace(" ", "␣"), color) } else { [] }),
-  )
-  #row([input], 0, blue)
-  #v(0.2em)
-  #row([target], 1, torch-orange)
-  #v(0.6em)
-  - A sliding window of `max_length` tokens; the *target* is the input *shifted by one*.
-  - Every position is a training example: "after `I HAD al`, predict `w`".
-  - The book's `GPTDatasetV1` is a 15-line `Dataset`; batches have shape `(batch, max_length)` and dtype int64.
-]
-
-#exercise(8, [Sliding windows (book, ch. 2)], minutes: 5)[
-  Complete `NextTokenDataset(token_ids, max_length, stride)`, modelled on the book's `GPTDatasetV1`:
-  - starting at positions `0, stride, 2 * stride, …`, cut windows of `max_length` tokens;
-  - the *target* of each window is the same window *shifted by one* token.
-
-  ```python
-  self.input_ids, self.target_ids = [], []
-  # TODO: fill both lists
-  ```
-  #text(fill: muted)[Careful: each window must leave room for its last target token.]
-]
-
-#solution(8, [Sliding windows])[
-  ```python
-  for i in range(0, len(token_ids) - max_length, stride):
-      self.input_ids.append(token_ids[i : i + max_length])
-      self.target_ids.append(token_ids[i + 1 : i + max_length + 1])
-  ```
-  - With `max_length=8` and `stride=4` on `"I HAD always thought…"`: \
-    window 1 = `"D always"` → target `" always "`.
-  - Chapter 5 uses `stride = max_length`: windows do not overlap, and no token is seen twice per epoch.
-]
-
 // ------------------------------------------------------------------ § 5
-#section("5", "The training loop", subtitle: [Five lines to rule them all], book: [A.7–A.8])
+#section("5", "The training loop", subtitle: [Five lines to rule them all], book: [A.7])
 
 #slide[The same loop, from appendix A to chapter 5][
   #show raw.where(block: true): set text(size: 13pt)
@@ -949,7 +928,7 @@
   )
 ]
 
-#slide[Losses, evaluation, and checkpoints][
+#slide[Loss and evaluation][
   #grid(
     columns: (1fr, 1fr),
     gutter: 0.8cm,
@@ -957,9 +936,13 @@
       *`F.cross_entropy(logits, labels)`*
       - takes *raw logits* (no softmax!) and int64 class ids;
       - combines `log_softmax` and the negative log-likelihood.
+      #v(0.3em)
+      #callout(title: [Sanity check])[An untrained classifier over $C$ classes has a loss $approx ln C$.]
+    ],
+    [
       ```python
       logits = model(X)       # (B, C)
-      labels                  # (B,) int64
+      labels = ...            # (B,) int64
       loss = F.cross_entropy(logits, labels)
 
       preds = logits.argmax(dim=1)
@@ -967,22 +950,10 @@
       acc = correct.to(torch.float32).mean()
       ```
     ],
-    [
-      *Save the `state_dict`, not the model*
-      ```python
-      torch.save(model.state_dict(),
-                 "model.pth")
-
-      model = NeuralNetwork(2, 3)
-      model.load_state_dict(
-          torch.load("model.pth"))
-      ```
-      #callout(title: [Sanity check])[An untrained classifier over $C$ classes has a loss $approx ln C$.]
-    ],
   )
 ]
 
-#exercise(9, [Train a classifier], minutes: 8)[
+#exercise(8, [Train a classifier], minutes: 8)[
   Train a multilayer perceptron on the spirals. Already provided in the notebook:
   ```python
   model = nn.Sequential(nn.Linear(2, 32), nn.ReLU(),
@@ -996,7 +967,7 @@
   - Then try a learning rate of 0.5, or a linear model (`nn.Linear(2, 3)` only).
 ]
 
-#solution(9, [Train a classifier])[
+#solution(8, [Train a classifier])[
   #grid(
     columns: (1.3fr, 1fr),
     gutter: 0.8cm,
@@ -1079,6 +1050,54 @@
       #align(center, text(fill: muted)[`TinyGPT`: ≈ 60 k parameters \ GPT-2 small: 124 M])
     ],
   )
+]
+
+#slide[Next-token prediction data (ch. 2)][
+  #let cell(ch, color) = box(
+    width: 1.05cm,
+    height: 1.05cm,
+    fill: color.lighten(85%),
+    stroke: 0.8pt + color,
+    radius: 3pt,
+    align(center + horizon, text(font: "DejaVu Sans Mono", size: 17pt, ch)),
+  )
+  #let chars = "I HAD always".clusters()
+  #let row(label, offset, color) = grid(
+    columns: (3cm,) + (1.15cm,) * 13,
+    align: horizon,
+    text(size: 16pt, weight: "bold", fill: color, label),
+    ..range(13).map(i => if i >= offset and i < offset + 8 { cell(chars.at(i).replace(" ", "␣"), color) } else { [] }),
+  )
+  #row([input], 0, blue)
+  #v(0.2em)
+  #row([target], 1, torch-orange)
+  #v(0.6em)
+  - A sliding window of `max_length` tokens, the *target* is the input *shifted by one*.
+  - Every position is a training example: "after `I HAD al`, predict `w`".
+  - The book's `GPTDatasetV1` is a 15-line `Dataset`; batches have shape `(batch, max_length)` and dtype int64.
+]
+
+#exercise(9, [Sliding windows (book, ch. 2)], minutes: 5)[
+  Complete `NextTokenDataset(token_ids, max_length, stride)`, modelled on the book's `GPTDatasetV1`:
+  - starting at positions `0, stride, 2 * stride, …`, cut windows of `max_length` tokens;
+  - the *target* of each window is the same window *shifted by one* token.
+
+  ```python
+  self.input_ids, self.target_ids = [], []
+  # TODO: fill both lists
+  ```
+  #text(fill: muted)[Careful: each window must leave room for its last target token.]
+]
+
+#solution(9, [Sliding windows])[
+  ```python
+  for i in range(0, len(token_ids) - max_length, stride):
+      self.input_ids.append(token_ids[i : i + max_length])
+      self.target_ids.append(token_ids[i + 1 : i + max_length + 1])
+  ```
+  - With `max_length=8` and `stride=4` on `"I HAD always thought…"`: \
+    window 1 = `"D always"` → target `" always "`.
+  - Chapter 5 uses `stride = max_length`: windows do not overlap, and no token is seen twice per epoch.
 ]
 
 #exercise(10, [The loss of a language model], minutes: 4)[
@@ -1175,7 +1194,6 @@
     [`nn.Module`], [parameters in `__init__`, computation in `forward`, call `model(x)`; `train()`/`eval()`],
     [Data], [`Dataset` (`__len__`, `__getitem__`) + `DataLoader` (batches, shuffling)],
     [Training], [forward → loss → `zero_grad()` → `backward()` → `step()`],
-    [Checkpoints], [`torch.save(model.state_dict(), …)` / `model.load_state_dict(torch.load(…))`],
   )
 ]
 

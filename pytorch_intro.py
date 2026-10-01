@@ -188,7 +188,16 @@ def _():
         _grad = _x.grad  # tensor(14.)
         ```
 
-        Recompute `_y` and call `_y.backward()` once more: `_x.grad` becomes 28, because gradients **accumulate**.
+        Gradients **accumulate**: run the forward pass again, then backpropagate, and `_x.grad` becomes 28.
+
+        ```python
+        _y = _x**3 + 2 * _x  # a new graph
+        _y.backward()
+        _x.grad  # tensor(28.)
+        ```
+
+        Calling `_y.backward()` twice on the **same** `_y` raises a `RuntimeError`: the first call frees the values
+        that the forward pass saved for the backward pass.
         """,
     )
     return
@@ -196,12 +205,11 @@ def _():
 
 @app.cell
 def _():
-    _x = torch.tensor(2.0)
-    _x.requires_grad = True # TODO: ask PyTorch to track gradients
-    _y = _x**3 + 2*_x  # TODO: y = x³ + 2x
+    _x = torch.tensor(2.0, requires_grad=True)  # TODO: ask PyTorch to track gradients
+    _y = _x**3 + 2 * _x  # TODO: y = x³ + 2x
     # TODO: backpropagate from y
     _y.backward()
-    _grad = _y.grad  # TODO: read dy/dx
+    _grad = _x.grad  # TODO: read dy/dx
 
     check_3(_x, _grad)
     return
@@ -211,30 +219,32 @@ def _():
 def _():
     exercise(
         4,
-        "Gradient descent by hand",
+        "Fit a line with an optimizer",
         r"""
         The data below follows $y = 3x + 1$, plus noise. Fit $\hat y = w x + b$ by minimising the mean squared error,
-        with plain tensors: no `torch.nn`, no optimizer. At each step:
+        with the optimizer `torch.optim.SGD` (learning rate 0.1). At each step:
 
         1. compute the loss;
-        2. backpropagate;
-        3. update `w` and `b` with `lr * grad`, **without recording the operation in the graph**;
-        4. reset the gradients.
+        2. reset the gradients: `optimizer.zero_grad()`;
+        3. backpropagate;
+        4. update `w` and `b`: `optimizer.step()`.
         """,
         r"""
         ```python
+        _optimizer = torch.optim.SGD([_w, _b], lr=0.1)
         for _step in range(200):
             _loss = ((_w * _x + _b - _y) ** 2).mean()
+            _optimizer.zero_grad()
             _loss.backward()
-            with torch.no_grad():
-                _w -= _lr * _w.grad
-                _b -= _lr * _b.grad
-            _w.grad.zero_()
-            _b.grad.zero_()
+            _optimizer.step()
             _losses.append(_loss.item())
         ```
 
-        This is exactly what `torch.optim.SGD` does in `optimizer.step()` and `optimizer.zero_grad()`.
+        - The optimizer receives the tensors to train: here `[w, b]`, later `model.parameters()`.
+        - `optimizer.step()` applies $\theta \leftarrow \theta - \eta \nabla_\theta \mathcal{L}$ to each of them,
+          using the gradients stored in `.grad`.
+        - Without `optimizer.zero_grad()`, the gradients of every step would **accumulate**.
+        - `Adam` and `AdamW` (used in the book) have the same interface, with smarter update rules.
         """,
     )
     return
@@ -242,22 +252,32 @@ def _():
 
 @app.cell
 def _():
-    torch.manual_seed(0)
-    _x = torch.linspace(-1, 1, 50)
-    _y = 3 * _x + 1 + 0.1 * torch.randn(50)
+    def _():
+        torch.manual_seed(0)
+        x = torch.linspace(-1, 1, 50)
+        y = 3 * x + 1 + 0.1 * torch.randn(50)
 
-    _w = torch.zeros(1, requires_grad=True)
-    _b = torch.zeros(1, requires_grad=True)
-    _lr = 0.1
-    _losses = []
-    for _step in range(200):
-        _loss = torch.tensor(0.0)  # TODO: the mean squared error of w * x + b
-        # TODO: backpropagate
-        # TODO: update w and b without recording the graph
-        # TODO: reset the gradients
-        _losses.append(_loss.item())
+        w = torch.zeros(1, requires_grad=True)
+        b = torch.zeros(1, requires_grad=True)
+        optimizer = torch.optim.SGD(
+            [w, b], lr=0.1
+        )  # TODO: SGD over [w, b], with a learning rate of 0.1
+        losses = []
+        for step in range(200):
+            res = w * x + b
+            loss = torch.mean(
+                (res - y) ** 2
+            )  # TODO: the mean squared error of w * x + b
+            # TODO: reset the gradients
+            optimizer.zero_grad()
+            # TODO: backpropagate
+            loss.backward()
+            # TODO: update w and b
+            optimizer.step()
+            losses.append(loss.item())
+        return x, y, w, b, optimizer, losses
 
-    check_4(_x, _y, _w, _b, _losses)
+    check_4(*_())
     return
 
 
@@ -307,23 +327,33 @@ def _():
 
 @app.cell
 def _():
+    torch.manual_seed(123)
+
     class NeuralNetwork(nn.Module):
-        def __init__(self, num_inputs, num_outputs):
+        def __init__(self, num_inputs: int, num_outputs: int):
             super().__init__()
             self.layers = nn.Sequential(
+                torch.nn.Linear(num_inputs, 30),
+                torch.nn.ReLU(),
+                torch.nn.Linear(30, 20),
+                torch.nn.ReLU(),
+                torch.nn.Linear(20, num_outputs),
                 # TODO: 1st hidden layer (30 units) and its ReLU
                 # TODO: 2nd hidden layer (20 units) and its ReLU
                 # TODO: output layer
             )
 
-        def forward(self, x):
+        def forward(self, x: torch.Tensor):
             return self.layers(x)
 
-    torch.manual_seed(123)
-    _model = NeuralNetwork(50, 3)
-    _n_params = None  # TODO: count the trainable parameters
+    def _():
+        model = NeuralNetwork(50, 3)
+        n_params = sum(
+            p.numel() for p in model.parameters()
+        )  # TODO: count the trainable parameters
+        return model, n_params
 
-    check_5(_model, _n_params)
+    check_5(*_())
     return
 
 
@@ -365,12 +395,12 @@ def _():
 @app.cell
 def _():
     class MyLayerNorm(nn.Module):
-        def __init__(self, emb_dim):
+        def __init__(self, emb_dim: int):
             super().__init__()
             self.eps = 1e-5
             # TODO: the trainable `scale` and `shift` parameters
 
-        def forward(self, x):
+        def forward(self, x: torch.Tensor):
             return x  # TODO: normalise over the last dimension, then scale and shift
 
     check_6(MyLayerNorm)
@@ -383,25 +413,25 @@ def _():
     ---
     ## 4 · `Dataset` and `DataLoader`
 
-    Exercises 7 and 9 use a 2-D classification problem that a linear model **cannot** solve: three interleaved spirals.
+    Exercises 7 and 8 use a 2-D classification problem that a linear model can not solve: three interleaved spirals.
     """)
     return
 
 
 @app.cell
 def _():
-    X_train, y_train, X_val, y_val = make_spirals()
+    x_train, y_train, x_val, y_val = make_spirals()
     print(
-        f"X_train: {tuple(X_train.shape)} {X_train.dtype} | y_train: {tuple(y_train.shape)} {y_train.dtype}"
+        f"X_train: {tuple(x_train.shape)} {x_train.dtype} | y_train: {tuple(y_train.shape)} {y_train.dtype}"
     )
-    print(f"X_val  : {tuple(X_val.shape)} | y_val: {tuple(y_val.shape)}")
+    print(f"X_val  : {tuple(x_val.shape)} | y_val: {tuple(y_val.shape)}")
 
     _fig, _ax = plt.subplots(figsize=(3.6, 3.6), constrained_layout=True)
-    _ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, cmap=CLASS_CMAP, s=8)
+    _ax.scatter(x_train[:, 0], x_train[:, 1], c=y_train, cmap=CLASS_CMAP, s=8)
     _ax.set_aspect("equal")
     _ax.set_title("Training set")
     _fig
-    return X_train, X_val, y_train, y_val
+    return x_train, x_val, y_train, y_val
 
 
 @app.cell(hide_code=True)
@@ -437,73 +467,26 @@ def _():
 
 
 @app.cell
-def _(X_train, y_train):
+def _(x_train, y_train):
     class ToyDataset(Dataset):
-        def __init__(self, X, y):
-            self.features = X
+        def __init__(self, x: torch.Tensor, y: torch.Tensor):
+            self.features = x
             self.labels = y
 
-        def __getitem__(self, index):
-            return None  # TODO: the (features, label) pair of sample `index`
+        def __getitem__(self, index: int):
+            return self.features[index], self.labels[
+                index
+            ]  # TODO: the (features, label) pair of sample `index`
 
         def __len__(self):
-            return 0  # TODO: the number of samples
+            return len(self.features)  # TODO: the number of samples
 
-    _train_ds = ToyDataset(X_train, y_train)
-    _train_loader = None  # TODO: shuffled batches of 32 samples
+    _train_ds = ToyDataset(x_train, y_train)
+    _train_loader = torch.utils.data.DataLoader(
+        _train_ds, batch_size=32, shuffle=True
+    )  # TODO: shuffled batches of 32 samples
 
-    check_7(_train_ds, _train_loader, X_train, y_train)
-    return
-
-
-@app.cell(hide_code=True)
-def _():
-    exercise(
-        8,
-        "Sliding windows for next-token prediction (book, chapter 2)",
-        r"""
-        An LLM learns to predict the **next token**. Complete `NextTokenDataset`, modelled on the book's
-        `GPTDatasetV1`: starting at positions `0, stride, 2 * stride, …`, cut windows of `max_length` tokens.
-        The **target** of each window is the same window shifted by one token, so a window must leave room for its
-        last target token.
-
-        The check uses a naive tokenizer (one id per character) on the first sentence of the book's short story.
-        """,
-        r"""
-        ```python
-        for i in range(0, len(token_ids) - max_length, stride):
-            self.input_ids.append(token_ids[i : i + max_length])
-            self.target_ids.append(token_ids[i + 1 : i + max_length + 1])
-        ```
-
-        Every position of a window is a training example: after `"I HAD al"`, predict `"w"`. Chapter 5 trains with
-        `stride = max_length`, so that the windows do not overlap.
-        """,
-    )
-    return
-
-
-@app.cell
-def _():
-    class NextTokenDataset(Dataset):
-        def __init__(self, token_ids, max_length, stride):
-            self.input_ids = []
-            self.target_ids = []
-            # TODO: a window of `max_length` tokens every `stride` tokens, and its target shifted by one
-
-        def __len__(self):
-            return len(self.input_ids)
-
-        def __getitem__(self, idx):
-            return self.input_ids[idx], self.target_ids[idx]
-
-    _text = "I HAD always thought Jack Gisburn rather a cheap genius"
-    _token_ids = torch.tensor(
-        [ord(_ch) for _ch in _text]
-    )  # a naive tokenizer: one id per character
-    _dataset = NextTokenDataset(_token_ids, max_length=8, stride=4)
-
-    check_8(_dataset, _text, max_length=8, stride=4)
+    check_7(_train_ds, _train_loader, x_train, y_train)
     return
 
 
@@ -519,7 +502,7 @@ def _():
 @app.cell(hide_code=True)
 def _():
     exercise(
-        9,
+        8,
         "Train a classifier",
         r"""
         Train the multilayer perceptron below on the spirals: complete the **five steps** of the training loop
@@ -547,23 +530,37 @@ def _():
 
 
 @app.cell
-def _(X_train, X_val, y_train, y_val):
+def _(x_train, x_val, y_train, y_val):
     torch.manual_seed(123)
-    _model = nn.Sequential(
-        nn.Linear(2, 32), nn.ReLU(), nn.Linear(32, 32), nn.ReLU(), nn.Linear(32, 3)
-    )
-    _optimizer = torch.optim.Adam(_model.parameters(), lr=0.01)
-    _train_loader = DataLoader(
-        TensorDataset(X_train, y_train), batch_size=32, shuffle=True
-    )
-    _losses = []
 
-    for _epoch in range(100):
-        _model.train()
-        for _features, _labels in _train_loader:
-            pass  # TODO: the five steps, then append loss.item() to _losses
+    def _():
+        model = nn.Sequential(
+            nn.Linear(2, 32),
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 3),
+        )
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+        train_loader = DataLoader(
+            TensorDataset(x_train, y_train), batch_size=32, shuffle=True
+        )
+        losses = []
 
-    check_9(_model, _losses, X_val, y_val)
+        for epoch in range(100):
+            model.train()
+            for features, labels in train_loader:
+                prediction = model(features)
+                loss = F.cross_entropy(prediction, labels)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                losses.append(loss.item())
+                # pass  # TODO: the five steps, then append loss.item() to _losses
+
+        return check_8(model, losses, x_val, y_val)
+
+    _()
     return
 
 
@@ -573,10 +570,70 @@ def _():
     ---
     ## 6 · Towards LLMs: a tiny character-level GPT
 
-    We train a (very) small GPT on Tiny Shakespeare, with **one token per character** (the book uses GPT-2's
-    tokenizer, with 50,257 tokens). The model, `TinyGPT`, follows the architecture of chapter 4: you do not need to
-    understand attention today. Its code, and that of the training function, is in the appendix.
+    Time to put everything together: we train a (very) small GPT on Tiny Shakespeare, with **one token per
+    character** (the book uses GPT-2's tokenizer, with 50,257 tokens).
+
+    1. cut the text into training examples (exercise 9);
+    2. compute the loss of the model (exercise 10);
+    3. train it, and generate text (exercise 11).
+
+    The model, `TinyGPT`, follows the architecture of chapter 4: you do not need to understand attention today.
+    Its code, and that of the training function, is in the appendix.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    exercise(
+        9,
+        "Sliding windows for next-token prediction (book, chapter 2)",
+        r"""
+        An LLM learns to predict the **next token**. Complete `NextTokenDataset`, modelled on the book's
+        `GPTDatasetV1`: starting at positions `0, stride, 2 * stride, …`, cut windows of `max_length` tokens.
+        The **target** of each window is the same window shifted by one token, so a window must leave room for its
+        last target token.
+
+        The check uses a naive tokenizer (one id per character) on the first sentence of the book's short story.
+        """,
+        r"""
+        ```python
+        for i in range(0, len(token_ids) - max_length, stride):
+            self.features.append(token_ids[i : i + max_length])
+            self.targets.append(token_ids[i + 1 : i + max_length + 1])
+        ```
+
+        Every position of a window is a training example: after `"I HAD al"`, predict `"w"`. Chapter 5 trains with
+        `stride = max_length`, so that the windows do not overlap.
+        """,
+    )
+    return
+
+
+@app.cell
+def _():
+    class NextTokenDataset(Dataset):
+        def __init__(self, token_ids: torch.Tensor, max_length: int, stride: int):
+            self.features = []
+            self.targets = []
+            for i in range(0, len(token_ids) - max_length, stride):
+                self.features.append(token_ids[i : i + max_length])
+                self.targets.append(token_ids[i + 1 : i + max_length + 1])
+            # TODO: a window of `max_length` tokens every `stride` tokens, and its target shifted by one
+
+        def __len__(self):
+            return len(self.features)
+
+        def __getitem__(self, idx: int):
+            return self.features[idx], self.targets[idx]
+
+    _text = "I HAD always thought Jack Gisburn rather a cheap genius"
+    _token_ids = torch.tensor(
+        [ord(_ch) for _ch in _text]
+    )  # a naive tokenizer: one id per character
+    _dataset = NextTokenDataset(_token_ids, max_length=8, stride=4)
+
+    check_9(_dataset, _text, max_length=8, stride=4)
     return
 
 
@@ -584,13 +641,6 @@ def _():
 def _():
     corpus = (DATA_DIR / "tinyshakespeare.txt").read_text(encoding="utf-8")
     tokenizer = CharTokenizer(corpus)
-    GPT_CONFIG = {
-        "vocab_size": tokenizer.vocab_size,
-        "context_length": 64,
-        "emb_dim": 64,
-        "n_layers": 1,
-        "drop_rate": 0.0,
-    }
 
     # Windows of context_length + 1 tokens: the same as NextTokenDataset with stride = max_length
     _windows = tokenizer.encode(corpus).unfold(0, 65, 64)
@@ -609,7 +659,7 @@ def _():
     print(
         f"{len(lm_train_loader)} training batches, {len(lm_val_loader)} validation batches"
     )
-    return GPT_CONFIG, lm_train_loader, lm_val_loader, tokenizer
+    return lm_train_loader, lm_val_loader, tokenizer
 
 
 @app.cell(hide_code=True)
@@ -637,22 +687,26 @@ def _():
 
 
 @app.cell
-def _(GPT_CONFIG, lm_train_loader):
-    torch.manual_seed(123)
-    _model = TinyGPT(GPT_CONFIG)
-    _inputs, _targets = next(iter(lm_train_loader))  # (32, 64) and (32, 64)
-    _logits = _model(_inputs)  # (32, 64, 65)
+def _(lm_train_loader, tokenizer):
+    def exercise_10():
+        model = TinyGPT(tokenizer.vocab_size)
+        inputs, targets = next(iter(lm_train_loader))  # (32, 64) and (32, 64)
+        logits = model(inputs)  # shape (32, 64, 65)
+        logits = logits.view(-1, 65)
+        targets = targets.flatten()
+        loss = F.cross_entropy(logits, targets)  # TODO
 
-    _loss = None  # TODO
+        return check_10(loss, logits, targets, tokenizer.vocab_size)
 
-    check_10(_loss, _logits, _targets, GPT_CONFIG["vocab_size"])
+    exercise_10()
     return
 
 
 @app.cell
-def _(GPT_CONFIG, lm_train_loader, lm_val_loader):
+def _(lm_train_loader, lm_val_loader, tokenizer):
     torch.manual_seed(123)
-    lm_model = TinyGPT(GPT_CONFIG)
+
+    lm_model = TinyGPT(tokenizer.vocab_size)
     _start = time.perf_counter()
     _losses = train_lm(
         lm_model, lm_train_loader, lm_val_loader, num_steps=1000, lr=0.01
@@ -671,21 +725,22 @@ def _():
         11,
         "Text generation (book, chapter 5)",
         r"""
-        Complete `generate`, which extends the token ids `idx` (shape `(batch, tokens)`) by `max_new_tokens` tokens.
-        At each step:
+        Complete `generate`, which extends the token ids `prompt` (shape `(batch, tokens)`) by
+        `max_new_tokens` tokens. Starting from `prompt`, at each step:
 
-        1. crop `idx` to its last `context_size` tokens (the model cannot see more);
+        1. crop the sequence to its last `context_size` tokens (the model cannot see more);
         2. compute the logits, without recording the graph;
         3. keep the logits of the **last** position: `(batch, vocab_size)`;
         4. pick the next token: the most likely one (`argmax`) if `temperature == 0`, otherwise sample it from
            `softmax(logits / temperature)` with `torch.multinomial`;
-        5. append it to `idx`.
+        5. append it to the sequence.
 
         Then play with the prompt and the temperature in the cell after the check.
         """,
         r"""
         ```python
-        def generate(model, idx, max_new_tokens, context_size, temperature=0.0):
+        def generate(model, prompt, max_new_tokens, context_size, temperature=0.0):
+            idx = prompt
             for _ in range(max_new_tokens):
                 idx_cond = idx[:, -context_size:]
                 with torch.no_grad():
@@ -708,31 +763,46 @@ def _():
 
 
 @app.cell
-def _(GPT_CONFIG, lm_model, tokenizer):
-    def generate(model, idx, max_new_tokens, context_size, temperature=0.0):
-        for _ in range(max_new_tokens):
-            pass  # TODO: the five steps of the statement
-        return idx
+def _(lm_model, tokenizer):
+    def generate(
+        model: TinyGPT,
+        prompt: torch.Tensor,
+        max_new_tokens: int,
+        context_size: int,
+        temperature=0.0,
+    ):
+        # prompt has shape (batch_size, prompt_length)
+        result = prompt
+        with torch.no_grad():
+            for _ in range(max_new_tokens):
+                inputs = result[:, -context_size:]
+                predicted = model(inputs)
+                next_token_logits = predicted[:, -1, :]
+                if temperature == 0:
+                    next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
+                else:
+                    probs = torch.softmax(next_token_logits / temperature, dim=-1)
+                    next_token = torch.multinomial(probs, num_samples=1)
+                result = torch.cat([result, next_token], dim=1)
+                # TODO: the five steps of the statement
+        return result
 
-    check_11(generate, lm_model, tokenizer, GPT_CONFIG["context_length"])
+    check_11(generate, lm_model, tokenizer, lm_model.context_length)
     return (generate,)
 
 
 @app.cell
-def _(GPT_CONFIG, generate, lm_model, tokenizer):
-    torch.manual_seed(123)
-    _prompt = "ROMEO:"
-    _idx = (
-        tokenizer.encode(_prompt).unsqueeze(0).to(device)
-    )  # add the batch dimension: (1, tokens)
-    _out = generate(
+def _(generate, lm_model, tokenizer):
+    prompt = "ROMEO:"
+    prompt = tokenizer.encode(prompt).unsqueeze(0).to(device)  # add the batch dimension with unsqueeze: (1, tokens)
+    out = generate(
         lm_model,
-        _idx,
+        prompt,
         max_new_tokens=300,
-        context_size=GPT_CONFIG["context_length"],
+        context_size=lm_model.context_length,
         temperature=0.8,
     )
-    mo.callout(mo.plain_text(tokenizer.decode(_out[0].cpu())), kind="info")
+    mo.callout(mo.plain_text(tokenizer.decode(out[0].cpu())), kind="info")
     return
 
 
@@ -751,8 +821,7 @@ def _():
     ---
     ## Appendix: helpers
 
-    The cells below define the checks of the exercises, the data, and the `TinyGPT` model. Their code is hidden;
-    you do not need to read it.
+    The cells below define the checks of the exercises, the data, etc. Their code is hidden because you do not need to read it but feel free to have a look.
     """)
     return
 
@@ -883,10 +952,20 @@ def check_3(x, grad):
 
 
 @app.function(hide_code=True)
-def check_4(x, y, w, b, losses):
+def check_4(x, y, w, b, optimizer, losses):
     """Check exercise 4 and, once attempted, plot the fit and the loss curve. @ai-generated"""
     untouched = w.item() == 0.0 and b.item() == 0.0
     result = report(
+        (
+            "an `SGD` optimizer over `[w, b]`",
+            lambda: (
+                None
+                if optimizer is None
+                else isinstance(optimizer, torch.optim.SGD)
+                and {id(p) for g in optimizer.param_groups for p in g["params"]}
+                == {id(w), id(b)}
+            ),
+        ),
         ("$w \\approx 3$", lambda: None if untouched else abs(w.item() - 3) < 0.15),
         ("$b \\approx 1$", lambda: None if untouched else abs(b.item() - 1) < 0.15),
         ("the loss decreases", lambda: None if untouched else losses[-1] < losses[0]),
@@ -1021,8 +1100,8 @@ def check_7(dataset, loader, X, y):
 
 
 @app.function(hide_code=True)
-def check_8(dataset, text, max_length, stride):
-    """Check exercise 8 by decoding the windows back to text. @ai-generated"""
+def check_9(dataset, text, max_length, stride):
+    """Check exercise 9 by decoding the windows back to text. @ai-generated"""
 
     def decode(ids):
         return "".join(map(chr, ids.tolist()))
@@ -1081,23 +1160,51 @@ def plot_decision_boundary(ax, model, X, y, lim=1.2, resolution=200):
 
 
 @app.function(hide_code=True)
-def check_9(model, losses, X_val, y_val):
-    """Check exercise 9 and, once trained, plot the loss and the decision regions. @ai-generated"""
-    if not losses:
-        return report(("validation accuracy above 90 %", lambda: None))
-    model.eval()
-    with torch.no_grad():
-        accuracy = (model(X_val).argmax(dim=1) == y_val).to(torch.float32).mean().item()
-    result = report(
-        (f"validation accuracy above 90 % (got {accuracy:.1%})", lambda: accuracy > 0.9)
+def check_8(model, losses, X_val, y_val):
+    """
+    Check exercise 8, with two independent pieces of feedback:
+
+    - the validation accuracy and the decision regions of the model, as soon
+      as it has been trained (i.e. one of its parameters has a gradient);
+    - the training loss curve, only if ``losses`` has been recorded.
+
+    @ai-generated
+    """
+    trained = any(p.grad is not None for p in model.parameters())
+    if trained:
+        model.eval()
+        with torch.no_grad():
+            accuracy = (
+                (model(X_val).argmax(dim=1) == y_val).to(torch.float32).mean().item()
+            )
+        accuracy_check = (
+            f"validation accuracy above 90 % (got {accuracy:.1%})",
+            lambda: accuracy > 0.9,
+        )
+        fig, ax = plt.subplots(figsize=(4, 3.4), constrained_layout=True)
+        plot_decision_boundary(ax, model, X_val, y_val)
+        ax.set_title("Decision regions (validation set)")
+        accuracy_part = mo.vstack([report(accuracy_check), fig])
+    else:
+        accuracy_part = report(("validation accuracy above 90 %", lambda: None))
+
+    if losses:
+        fig, ax = plt.subplots(figsize=(5, 3.4), constrained_layout=True)
+        ax.plot(losses, lw=0.8)
+        ax.set_xlabel("optimizer step")
+        ax.set_ylabel("training loss")
+        ax.set_title(f"Training loss (last: {losses[-1]:.3f})")
+        loss_part = fig
+    else:
+        loss_part = mo.callout(
+            mo.md(
+                "**Training loss:** append `loss.item()` to `losses` at each step to see the training curve."
+            ),
+            kind="neutral",
+        )
+    return mo.hstack(
+        [accuracy_part, loss_part], justify="start", align="start", gap=2, widths=[1, 1]
     )
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 3.4), constrained_layout=True)
-    ax1.plot(losses, lw=0.8)
-    ax1.set_xlabel("optimizer step")
-    ax1.set_ylabel("training loss")
-    plot_decision_boundary(ax2, model, X_val, y_val)
-    ax2.set_title("Decision regions (validation set)")
-    return mo.vstack([result, fig])
 
 
 @app.class_definition(hide_code=True)
@@ -1105,8 +1212,6 @@ class CharTokenizer:
     """
     Character-level tokenizer exposing the same ``encode``/``decode``
     interface as the ``tiktoken`` tokenizer used in the book.
-
-    @ai-generated
     """
 
     def __init__(self, text):
@@ -1161,18 +1266,15 @@ class CausalSelfAttention(nn.Module):
 class TransformerBlock(nn.Module):
     """Pre-LayerNorm transformer block (attention and feed-forward, with residual connections), as in chapter 4. @ai-generated"""
 
-    def __init__(self, cfg):
+    def __init__(self, emb_dim=64, context_length=64, drop_rate=0.0):
         super().__init__()
-        emb_dim = cfg["emb_dim"]
         self.norm1 = nn.LayerNorm(emb_dim)
-        self.att = CausalSelfAttention(
-            emb_dim, emb_dim, cfg["context_length"], cfg["drop_rate"]
-        )
+        self.att = CausalSelfAttention(emb_dim, emb_dim, context_length, drop_rate)
         self.norm2 = nn.LayerNorm(emb_dim)
         self.ff = nn.Sequential(
             nn.Linear(emb_dim, 4 * emb_dim), nn.GELU(), nn.Linear(4 * emb_dim, emb_dim)
         )
-        self.drop_shortcut = nn.Dropout(cfg["drop_rate"])
+        self.drop_shortcut = nn.Dropout(drop_rate)
 
     def forward(self, x):
         x = x + self.drop_shortcut(self.att(self.norm1(x)))
@@ -1182,22 +1284,31 @@ class TransformerBlock(nn.Module):
 @app.class_definition(hide_code=True)
 class TinyGPT(nn.Module):
     """
-    Miniature version of the book's ``GPTModel`` (chapter 4), configured with
-    the same kind of dictionary, but with single-head attention.
-
-    @ai-generated
+    Miniature version of the book's ``GPTModel`` (chapter 4), with single-head attention.
+    The book's configuration dictionary is replaced by keyword arguments.
     """
 
-    def __init__(self, cfg):
+    def __init__(
+        self,
+        vocab_size: int,
+        context_length: int = 64,
+        emb_dim: int = 64,
+        n_layers: int = 1,
+        drop_rate: float = 0.0,
+    ):
         super().__init__()
-        self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"])
-        self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"])
-        self.drop_emb = nn.Dropout(cfg["drop_rate"])
+        self.context_length = context_length
+        self.tok_emb = nn.Embedding(vocab_size, emb_dim)
+        self.pos_emb = nn.Embedding(context_length, emb_dim)
+        self.drop_emb = nn.Dropout(drop_rate)
         self.trf_blocks = nn.Sequential(
-            *[TransformerBlock(cfg) for _ in range(cfg["n_layers"])]
+            *[
+                TransformerBlock(emb_dim, context_length, drop_rate)
+                for _ in range(n_layers)
+            ]
         )
-        self.final_norm = nn.LayerNorm(cfg["emb_dim"])
-        self.out_head = nn.Linear(cfg["emb_dim"], cfg["vocab_size"], bias=False)
+        self.final_norm = nn.LayerNorm(emb_dim)
+        self.out_head = nn.Linear(emb_dim, vocab_size, bias=False)
 
     def forward(self, in_idx):
         _, seq_len = in_idx.shape
@@ -1271,7 +1382,12 @@ def train_lm(model, train_loader, val_loader, num_steps, lr):
 
 @app.function(hide_code=True)
 def check_11(generate_fn, model, tokenizer, context_size):
-    """Check exercise 11 against a reference implementation of greedy decoding. @ai-generated"""
+    """
+    Check exercise 11: shapes, greedy decoding against a reference implementation,
+    cropping, and that `temperature=1.0` actually samples (repeated runs differ).
+
+    @ai-generated
+    """
     model_device = next(model.parameters()).device
     prompt = tokenizer.encode("ROMEO:").unsqueeze(0).to(model_device)
     long_prompt = (
@@ -1291,6 +1407,18 @@ def check_11(generate_fn, model, tokenizer, context_size):
         out = generate_fn(model, idx, n, context_size, **kwargs)
         return None if out.shape == idx.shape else out.shape == (1, idx.shape[1] + n)
 
+    def samples(n_runs=5):
+        # Unseeded on purpose: five identical 20-token samples at T=1 are
+        # vanishingly unlikely, and seeding would reset the notebook's RNG.
+        shape_ok = appends(prompt, 20, temperature=1.0)
+        if not shape_ok:
+            return shape_ok
+        outs = [
+            generate_fn(model, prompt, 20, context_size, temperature=1.0)
+            for _ in range(n_runs)
+        ]
+        return any(not torch.equal(out, outs[0]) for out in outs[1:])
+
     return report(
         ("appends `max_new_tokens` tokens", lambda: appends(prompt, 20)),
         (
@@ -1306,7 +1434,7 @@ def check_11(generate_fn, model, tokenizer, context_size):
         ("crops prompts longer than `context_size`", lambda: appends(long_prompt, 5)),
         (
             "samples with `temperature=1.0`",
-            lambda: appends(prompt, 20, temperature=1.0),
+            samples,
         ),
     )
 
