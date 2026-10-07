@@ -58,14 +58,13 @@ def _():
     mo.md(r"""
     # 🔥 An introduction to PyTorch
 
-    *Getting ready for **Build a Large Language Model (From Scratch)** by Sebastian Raschka*
+    Start by clicking the "play" button at the bottom right. This will generate the exercice statements.
 
-    The concepts are presented on the slides, this notebook holds the exercises. Each exercise has:
-
-    1. a **statement**;
+    Each exercise has:
+    1. a statement;
     2. a cell to complete: look for the `TODO`s;
-    3. an **automatic check** below that cell (⏳ to do, ✅ correct, ❌ not quite);
-    4. a **solution**, hidden in the "💡 Solution" box.
+    3. an automatic check below that cell (⏳ to do, ✅ correct, ❌ not quite);
+    4. a solution, hidden in the "💡 Solution" box.
 
     /// tip | About marimo
     This is a **reactive** [marimo](https://marimo.io) notebook: when you edit a cell, every cell that depends on it

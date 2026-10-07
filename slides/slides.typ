@@ -145,37 +145,6 @@
   text(size: 14pt, fill: luma(170))[Notebook: `uv run marimo edit pytorch_intro.py`]
 }
 
-// ------------------------------------------------------------------ agenda
-#slide[Today's plan][
-  #grid(
-    columns: (1.25fr, 1fr),
-    gutter: 1.2cm,
-    table(
-      columns: (auto, 1fr, auto),
-      align: (center, left, right),
-      table.header[§][Topic][Time],
-      [0], [Why PyTorch?], [5'],
-      [1], [Tensors: NumPy with superpowers], [20'],
-      [2], [Autograd: gradients for free], [15'],
-      [3], [`nn.Module`: building models], [10'],
-      [4], [`Dataset` and `DataLoader`], [10'],
-      [5], [The training loop], [15'],
-      [6], [Towards LLMs: a tiny GPT], [10'],
-      [7], [GPUs and wrap-up], [5'],
-    ),
-    [
-      *You know:* Python, NumPy arrays, broadcasting.
-
-      *You will be able to:* read and write every line of PyTorch code in the book.
-
-      #v(0.5em)
-      #callout(title: [Format])[
-        Short slides introduce each concept, then you solve a *short exercise* in the marimo notebook
-        (11 in total). The solution is on the next slide.
-      ]
-    ],
-  )
-]
 
 // ------------------------------------------------------------------ § 0
 #section("0", "Why PyTorch?", subtitle: [What the library gives us], book: [A.1])
